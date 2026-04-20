@@ -1,9 +1,12 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --python 3.13 --script
+# /// script
+# requires-python = ">=3.13"
+# dependencies = ["pyyaml"]
+# ///
 
 """daily_worklog.py — 여러 repo의 일별 commit 로그를 raw 마크다운으로 추출.
-
 Usage:
-    daily_worklog.py [DATE]              # DATE=YYYY-MM-DD, 기본=오늘
+    daily_worklog.py [DATE]              # DATE=YYYY-MM-DD
     OUTPUT=/path/to/out.md daily_worklog.py 2026-04-07
 """
 
@@ -16,9 +19,11 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
+import yaml
+
 # ===== 설정 =====
-REPOS_FILE = Path(
-    os.environ.get("REPOS_FILE", Path.home() / "workspace/worklog/repos.conf")
+CONFIG_FILE = Path(
+    os.environ.get("CONFIG_FILE", Path.home() / "workspace/worklog/config.yaml")
 )
 AUTHOR = os.environ.get("WORKLOG_AUTHOR") or (
     subprocess.run(
@@ -42,13 +47,21 @@ class Commit:
 
 def load_repos(path: Path) -> list[Path]:
     if not path.is_file():
-        sys.exit(f"ERROR: repos file not found: {path}")
+        sys.exit(f"ERROR: config file not found: {path}")
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        sys.exit(f"ERROR: cannot parse {path}: {exc}")
+
     repos: list[Path] = []
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+    for entry in data.get("repos") or []:
+        if isinstance(entry, str):
+            raw = entry
+        elif isinstance(entry, dict) and "path" in entry:
+            raw = entry["path"]
+        else:
             continue
-        repos.append(Path(line).expanduser())
+        repos.append(Path(raw).expanduser())
     if not repos:
         sys.exit(f"ERROR: no repos in {path}")
     return repos
@@ -145,7 +158,7 @@ def main(argv: list[str]) -> int:
     until = f"{target_date} 23:59:59"
 
     output_path = Path(os.environ.get("OUTPUT", f"/tmp/worklog-{target_date}.raw.md"))
-    repos = load_repos(REPOS_FILE)
+    repos = load_repos(CONFIG_FILE)
 
     sections: list[str] = []
     sections.append(f"# Worklog raw {target_date}\n")

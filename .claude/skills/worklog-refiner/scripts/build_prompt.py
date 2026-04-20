@@ -26,11 +26,11 @@ PROMPT_HEADER = """다음은 오늘 여러 repository의 git commit 로그다.
 아래 표준 양식의 일일 업무일지로 변환해라.
 
 [양식 규칙]
-- 첫 줄: # Worklog YYYY-MM-DD
+- 첫 줄: ## YYYY-MM-DD
 - 인용구로 메타데이터: > author: ..., > tags: #t1 #t2 ...
-- ## Summary: 2~3줄 산문 요약 (한국어)
+- ### Summary: 2~3줄 산문 요약 (한국어)
   요약시 개조식 명사형 종결로 bullet point사용해서 간결하게 작성
-- ## Projects: 카테고리 사전에서만 선택해 ### 헤딩으로 사용
+- ### Projects: 카테고리 사전에서만 선택해 #### 헤딩으로 사용
   - 각 작업: - [x] 한 줄 설명 + 인라인 태그(`#tag`)
   - #todo는 모든 작업에 넣고 다른 인라인 태그 추가가 필요할경우 아래 있는 Types 로한정할것
 Types: feat, fix, refactor, perf, docs, test, chore, build, ci, style, revert
@@ -44,8 +44,8 @@ Types: feat, fix, refactor, perf, docs, test, chore, build, ci, style, revert
   - [ ] 작업내용  #project/프로젝트명 #todo  [due:: 2026-02-05]  [completion:: 2026-02-09]
 
   - 진행 없는 카테고리는 _(진행 없음)_
-- ## Repositories: 각 레포를 #### 헤딩, 커밋 short hash + subject 나열
-- ## Notes: 회의/외근/메모 등 작업 외 사항 (없으면 섹션 생략)
+- ### Repositories: 각 레포를 #### 헤딩, 커밋 short hash + subject 나열
+- ### Notes: 회의/외근/메모 등 작업 외 사항 (없으면 섹션 생략)
 
 [분류 규칙]
 1. "repo → project 매핑"에서 해당 repo 이름을 찾는다
@@ -60,8 +60,6 @@ Types: feat, fix, refactor, perf, docs, test, chore, build, ci, style, revert
 - 한국어로 작성
 
 [예시]
-
-
 - [ ] like, brand like 정보 원본 테이블 분리 #project/cdp-pipeline #todo #refactor [due:: 2026-04-03]
 - [x] moltbook용 twitter 인증 기능 테스트 #project/moltbook #todo  [due:: 2026-02-05]  [completion:: 2026-02-09]
 """
@@ -91,7 +89,7 @@ def render_config(config_path: Path) -> str:
             for ov in entry.get("overrides") or []:
                 match = ov.get("match", "")
                 proj = ov.get("project", "")
-                lines.append(f"    override: subject가 \"{match}\" 으로 시작 → {proj}")
+                lines.append(f'    override: subject가 "{match}" 으로 시작 → {proj}')
         lines.append("")
 
     task_tags = data.get("task_tags") or []
@@ -120,8 +118,10 @@ def build_prompt(input_path: Path, config_path: Path | None = None) -> str:
             parts.append(render_config(config_path))
             parts.append("")
         else:
-            print(f"WARN: config not found, proceeding without: {config_path}",
-                  file=sys.stderr)
+            print(
+                f"WARN: config not found, proceeding without: {config_path}",
+                file=sys.stderr,
+            )
 
     parts.append("[입력 데이터]")
     parts.append(input_path.read_text(encoding="utf-8"))
@@ -131,10 +131,18 @@ def build_prompt(input_path: Path, config_path: Path | None = None) -> str:
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--input", required=True, type=Path,
-                   help="raw markdown produced by daily_worklog.py")
-    p.add_argument("--config", type=Path, default=None,
-                   help="optional config.yaml with project mappings")
+    p.add_argument(
+        "--input",
+        required=True,
+        type=Path,
+        help="raw markdown produced by daily_worklog.py",
+    )
+    p.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="optional config.yaml with project mappings",
+    )
     return p.parse_args(argv)
 
 

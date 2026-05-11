@@ -42,8 +42,6 @@ API_KEY_ENV_VARS = (
 
 def _subscription_env() -> dict[str, str]:
     env = os.environ.copy()
-    # Ensure simple mode to avoid hook pollution
-    env["CLAUDE_CODE_SIMPLE"] = "1"
     # Gemini CLI blocks headless runs in untrusted cwd unless this is explicit.
     env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
     for key in API_KEY_ENV_VARS:

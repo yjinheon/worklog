@@ -18,6 +18,7 @@ Env:
 
 from __future__ import annotations
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -41,9 +42,50 @@ API_KEY_ENV_VARS = (
 
 def _subscription_env() -> dict[str, str]:
     env = os.environ.copy()
+    # Ensure simple mode to avoid hook pollution
+    env["CLAUDE_CODE_SIMPLE"] = "1"
+    # Gemini CLI blocks headless runs in untrusted cwd unless this is explicit.
+    env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
     for key in API_KEY_ENV_VARS:
         env.pop(key, None)
     return env
+
+
+def _clean_output(text: str) -> str:
+    """Strip hook system noise from stdout."""
+    lines = text.splitlines()
+    start_idx = 0
+    end_idx = len(lines)
+
+    HOOK_PREFIXES = (
+        "# [worklog]",
+        "Legend:",
+        "Format:",
+        "Fetch details:",
+        "Search:",
+        "Stats:",
+        "Access ",
+        "View Observations ",
+        "Hook system message:",
+    )
+
+    # Find hook footer
+    for i, line in enumerate(lines):
+        if "Created execution plan for SessionEnd" in line:
+            end_idx = i
+            break
+
+    # Skip hook header lines
+    for i in range(end_idx):
+        line = lines[i].strip()
+        if not line:
+            continue
+        if any(line.startswith(p) for p in HOOK_PREFIXES):
+            continue
+        start_idx = i
+        break
+
+    return "\n".join(lines[start_idx:end_idx]).strip()
 
 
 def _derive_date(input_path: Path) -> str:
@@ -85,7 +127,7 @@ def call_claude(prompt: str, *, work_dir: Path, timeout: int) -> str | None:
                 "claude",
                 "-p", prompt,
                 "--output-format", "text",
-                "--allowedTools", "",
+                "--tools", "",
             ],
             cwd=work_dir,
             env=_subscription_env(),
@@ -103,7 +145,7 @@ def call_claude(prompt: str, *, work_dir: Path, timeout: int) -> str | None:
         print(f"  claude failed (see {err_log})", file=sys.stderr)
         return None
 
-    out = result.stdout.strip()
+    out = _clean_output(result.stdout)
     if not out:
         print("  claude returned empty output", file=sys.stderr)
         return None
@@ -118,7 +160,7 @@ def call_gemini(prompt: str, *, work_dir: Path, timeout: int) -> str | None:
     err_log = Path("/tmp/refine-gemini.err")
     try:
         result = subprocess.run(
-            ["gemini", "-p", "--output-format", "text"],
+            ["gemini", "-p", "", "--output-format", "text"],
             cwd=work_dir,
             env=_subscription_env(),
             input=prompt,
@@ -136,7 +178,7 @@ def call_gemini(prompt: str, *, work_dir: Path, timeout: int) -> str | None:
         print(f"  gemini failed (see {err_log})", file=sys.stderr)
         return None
 
-    out = result.stdout.strip()
+    out = _clean_output(result.stdout)
     if not out:
         print("  gemini returned empty output", file=sys.stderr)
         return None
@@ -144,10 +186,19 @@ def call_gemini(prompt: str, *, work_dir: Path, timeout: int) -> str | None:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) < 2:
-        sys.exit("usage: refine_worklog.py <raw-md-path>")
+    parser = argparse.ArgumentParser(
+        description="Refine raw worklog markdown via LLM."
+    )
+    parser.add_argument("input_path", help="Path to the raw markdown file.")
+    parser.add_argument(
+        "--backend", "-b",
+        choices=["claude", "gemini", "auto"],
+        default="auto",
+        help="LLM backend to use (default: auto)"
+    )
+    args = parser.parse_args(argv[1:])
 
-    input_path = Path(argv[1]).expanduser().resolve()
+    input_path = Path(args.input_path).expanduser().resolve()
     if not input_path.is_file():
         sys.exit(f"ERROR: input not found: {input_path}")
 
@@ -169,18 +220,33 @@ def main(argv: list[str]) -> int:
     work_dir.mkdir(parents=True, exist_ok=True)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"refining: {input_path}", file=sys.stderr)
+    print(f"refining: {input_path} (backend={args.backend})", file=sys.stderr)
     prompt = build_prompt_text(input_path, config_path)
 
-    result: str | None
-    used: str
+    result: str | None = None
+    used: str = ""
 
-    if (result := call_claude(prompt, work_dir=work_dir, timeout=timeout)) is not None:
-        used = "claude"
-    elif (result := call_gemini(prompt, work_dir=work_dir, timeout=timeout)) is not None:
-        used = "gemini"
-    else:
-        print("ERROR: all LLM backends failed. Saving raw input as fallback.",
+    # Strategy selection
+    backends_to_try = []
+    if args.backend == "claude":
+        backends_to_try = ["claude"]
+    elif args.backend == "gemini":
+        backends_to_try = ["gemini"]
+    else:  # auto
+        backends_to_try = ["claude", "gemini"]
+
+    for backend in backends_to_try:
+        if backend == "claude":
+            result = call_claude(prompt, work_dir=work_dir, timeout=timeout)
+        elif backend == "gemini":
+            result = call_gemini(prompt, work_dir=work_dir, timeout=timeout)
+
+        if result is not None:
+            used = backend
+            break
+
+    if result is None:
+        print("ERROR: requested LLM backend(s) failed. Saving raw input as fallback.",
               file=sys.stderr)
         output_path.write_bytes(input_path.read_bytes())
         return 2
@@ -189,6 +255,7 @@ def main(argv: list[str]) -> int:
                            encoding="utf-8")
     print(f"wrote: {output_path} (engine={used})")
     return 0
+
 
 
 if __name__ == "__main__":

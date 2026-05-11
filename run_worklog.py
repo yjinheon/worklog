@@ -8,6 +8,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import os
 import subprocess
 import sys
@@ -17,12 +18,6 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 EXTRACT_SCRIPT = SCRIPT_DIR / "daily_worklog.py"
 REFINE_SCRIPT = SCRIPT_DIR / "refine_worklog.py"
-
-
-def _parse_date(argv: list[str]) -> date:
-    if len(argv) > 1:
-        return datetime.strptime(argv[1], "%Y-%m-%d").date()
-    return date.today()
 
 
 def extract_git_log(target_date: date, raw_path: Path) -> None:
@@ -35,14 +30,34 @@ def extract_git_log(target_date: date, raw_path: Path) -> None:
         sys.exit(f"ERROR: extraction failed (exit={result.returncode})")
 
 
-def refine_with_llm(raw_path: Path) -> int:
-    print("==> [2/2] refining with LLM")
-    result = subprocess.run([str(REFINE_SCRIPT), str(raw_path)])
+def refine_with_llm(raw_path: Path, backend: str) -> int:
+    print(f"==> [2/2] refining with LLM (backend={backend})")
+    cmd = [str(REFINE_SCRIPT), str(raw_path), "--backend", backend]
+    result = subprocess.run(cmd)
     return result.returncode
 
 
 def main(argv: list[str]) -> int:
-    target_date = _parse_date(argv)
+    parser = argparse.ArgumentParser(
+        description="Orchestrate daily worklog extraction + LLM refinement."
+    )
+    parser.add_argument(
+        "date", nargs="?", help="Target date (YYYY-MM-DD), defaults to today."
+    )
+    parser.add_argument(
+        "--backend",
+        "-b",
+        choices=["claude", "gemini", "auto"],
+        default="auto",
+        help="LLM backend to use (default: auto)",
+    )
+    args = parser.parse_args(argv[1:])
+
+    if args.date:
+        target_date = datetime.strptime(args.date, "%Y-%m-%d").date()
+    else:
+        target_date = date.today()
+
     raw_path = Path(f"/tmp/worklog-{target_date}.raw.md")
 
     extract_git_log(target_date, raw_path)
@@ -51,7 +66,7 @@ def main(argv: list[str]) -> int:
         print(f"no commits found for {target_date}, exiting", file=sys.stderr)
         return 0
 
-    rc = refine_with_llm(raw_path)
+    rc = refine_with_llm(raw_path, args.backend)
     if rc != 0:
         return rc
 

@@ -1,14 +1,26 @@
-version: 2
+version: 3
 
-projects:
-  proejct_1:           "파이프라인 구축"
-  project_2:           "배치 파이프라인"
-  project_3: "데이터 파이프라인 리팩토링 및 통합"
-  project_4:    "데이터 파이프라인 모니터링 체계 구축"
+# Project names are derived from repo folder names.
+# Example: ~/workspace/local-flow -> project name "local-flow".
+#
+# `project_groups` is metadata for later rollups only. Do not use group names
+# as worklog project headings or #project tags.
+project_groups:
+  data-engineering:
+    description: Data pipelines, orchestration, ingestion, and warehouse work
+  personal-kms:
+    description: Personal knowledge management, blog, notes, and automation
+  learning:
+    description: Study projects and playground repositories
 
 repos:
   - path: ~/workspace/data-pipeline
-    project: project_1
+    description: Batch and streaming data pipeline implementation
+    group: data-engineering
 
-task_tags:   [feat, fix, refactor, perf, docs, test, chore, build, ci, style, revert]
+  - path: ~/workspace/astro-blog
+    description: Obsidian-backed personal blog and knowledge base
+    group: personal-kms
+
+task_tags: [feat, fix, refactor, perf, docs, test, chore, build, ci, style, revert]
 system_tags: [elasticsearch, clickhouse, dagster, airflow, kafka, dbt, kubernetes, redis]

@@ -39,6 +39,14 @@ all-authors:
 plan top="3":
     ./scripts/plan.sh {{top}}
 
+# 9) worklog를 Obsidian daily note의 Today 섹션에 반영
+obsidian-sync date="":
+    ./sync_worklog_to_obsidian.py {{date}}
+
+# 10) Obsidian 반영 diff만 확인
+obsidian-dry date="":
+    ./sync_worklog_to_obsidian.py {{date}} --dry-run
+
 # SQLite: 등록된 repo 보기
 db-repos:
     sqlite3 {{db}} "SELECT name, project, branch FROM repo;"

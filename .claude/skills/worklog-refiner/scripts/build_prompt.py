@@ -30,7 +30,7 @@ PROMPT_HEADER = """다음은 오늘 여러 repository의 git commit 로그다.
 - 인용구로 메타데이터: > author: ..., > tags: #t1 #t2 ...
 - ### Summary: 2~3줄 산문 요약 (한국어)
   요약시 개조식 명사형 종결로 bullet point사용해서 간결하게 작성
-- ### Projects: 카테고리 사전에서만 선택해 #### 헤딩으로 사용
+- ### Projects: repository 폴더명을 프로젝트명으로 사용해 #### 헤딩으로 작성
   - 각 작업: - [x] 한 줄 설명 + 인라인 태그(`#tag`)
   - #todo는 모든 작업에 넣고 다른 인라인 태그 추가가 필요할경우 아래 있는 Types 로한정할것
 Types: feat, fix, refactor, perf, docs, test, chore, build, ci, style, revert
@@ -48,10 +48,11 @@ Types: feat, fix, refactor, perf, docs, test, chore, build, ci, style, revert
 - ### Notes: 회의/외근/메모 등 작업 외 사항 (없으면 섹션 생략)
 
 [분류 규칙]
-1. "repo → project 매핑"에서 해당 repo 이름을 찾는다
-2. overrides가 있으면 commit subject prefix 매칭 우선 적용
-3. 매칭 실패 시 해당 repo의 project 사용
-4. repo가 매핑에 없으면 unclassified 분류
+1. project 이름은 항상 repository path의 마지막 폴더명이다
+2. `#project/<project-name>`의 `<project-name>`도 repository 폴더명과 동일하게 쓴다
+3. project description은 작업 내용을 더 정확히 요약하기 위한 참고 정보로만 사용한다
+4. project group은 비슷한 성격의 project를 나중에 묶어 보기 위한 메타데이터다
+5. project group을 ### Projects의 heading이나 `#project/...` 태그로 사용하지 말 것
 
 [출력]
 - 순수 마크다운만
@@ -70,26 +71,46 @@ def render_config(config_path: Path) -> str:
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     lines: list[str] = []
 
-    projects = data.get("projects") or {}
-    if projects:
-        lines.append("[프로젝트 카테고리]")
-        for key, label in projects.items():
-            lines.append(f"- {key}: {label}")
+    project_groups = data.get("project_groups") or {}
+    if project_groups:
+        lines.append("[project_groups]  (묶어 보기 위한 메타데이터, project 이름으로 쓰지 말 것)")
+        for group, value in project_groups.items():
+            if isinstance(value, dict):
+                description = value.get("description", "")
+                if description:
+                    lines.append(f"- {group}: {description}")
+                else:
+                    lines.append(f"- {group}")
+            else:
+                lines.append(f"- {group}: {value}")
         lines.append("")
 
     repos = data.get("repos") or []
     if repos:
-        lines.append("[repo → project 매핑]  (repo 이름은 경로의 마지막 디렉토리명)")
+        lines.append("[projects]  (project 이름은 path의 마지막 폴더명)")
         for entry in repos:
-            if not isinstance(entry, dict):
+            if isinstance(entry, str):
+                path = entry
+                description = ""
+                group = ""
+            elif isinstance(entry, dict):
+                path = entry.get("path", "")
+                description = entry.get("description", "")
+                group = entry.get("group", "")
+            else:
                 continue
-            name = Path(entry.get("path", "")).name
-            project = entry.get("project", "unclassified")
-            lines.append(f"- {name} → {project}")
-            for ov in entry.get("overrides") or []:
-                match = ov.get("match", "")
-                proj = ov.get("project", "")
-                lines.append(f'    override: subject가 "{match}" 으로 시작 → {proj}')
+
+            name = Path(path).name
+            if not name:
+                continue
+
+            attrs: list[str] = []
+            if description:
+                attrs.append(f"description={description}")
+            if group:
+                attrs.append(f"group={group}")
+            suffix = f" ({'; '.join(attrs)})" if attrs else ""
+            lines.append(f"- {name}{suffix}")
         lines.append("")
 
     task_tags = data.get("task_tags") or []

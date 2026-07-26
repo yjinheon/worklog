@@ -113,6 +113,58 @@ class JiraDoneTests(unittest.TestCase):
         )
         self.assertIn('resolutiondate < "2026-07-01"', sent["jql"])
 
+    def test_main_follows_next_page_token_and_allows_missing_parent(self) -> None:
+        parentless = sample_issue()
+        parentless["key"] = "DC-843"
+        parentless_fields = parentless["fields"]
+        self.assertIsInstance(parentless_fields, dict)
+        parentless_fields["parent"] = None
+        responses = [
+            FakeResponse(
+                {"issues": [sample_issue()], "nextPageToken": "page-2"}
+            ),
+            FakeResponse({"issues": [parentless], "isLast": True}),
+        ]
+
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config = root / "config.yaml"
+            output = root / "result.csv"
+            config.write_text(
+                "JIRA_BASE_URL: https://example.atlassian.net\n"
+                "JIRA_EMAIL: worker@example.com\n",
+                encoding="utf-8",
+            )
+            with (
+                patch.dict(
+                    "os.environ", {"JIRA_API_TOKEN": "test-token"}, clear=True
+                ),
+                patch("jira_done.urlopen", side_effect=responses) as request,
+            ):
+                result = jira_done.main(
+                    [
+                        "--start",
+                        "2026-06-01",
+                        "--end",
+                        "2026-06-30",
+                        "--config",
+                        str(config),
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+            with output.open(encoding="utf-8-sig", newline="") as stream:
+                rows = list(csv.DictReader(stream))
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1]["epic_key"], "")
+        self.assertEqual(rows[1]["epic_name"], "")
+        self.assertEqual(rows[1]["parent_type"], "")
+        second_body = json.loads(request.call_args_list[1].args[0].data)
+        self.assertEqual(second_body["nextPageToken"], "page-2")
+
 
 if __name__ == "__main__":
     unittest.main()

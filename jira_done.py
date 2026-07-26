@@ -112,38 +112,52 @@ class DateRange:
 
 
 def search_issues(config: JiraConfig, jql: str) -> list[dict[str, Any]]:
-    """Fetch one page of Jira issues matching the supplied JQL."""
-    request_body = json.dumps(
-        {
+    """Fetch every Jira issue page matching the supplied JQL."""
+    credentials = base64.b64encode(
+        f"{config.email}:{config.token}".encode()
+    ).decode()
+    issues: list[dict[str, Any]] = []
+    next_page_token: str | None = None
+    seen_tokens: set[str] = set()
+
+    while True:
+        request_data: dict[str, Any] = {
             "jql": jql,
             "fields": ["summary", "created", "resolutiondate", "parent"],
             "maxResults": 100,
         }
-    ).encode()
-    credentials = base64.b64encode(
-        f"{config.email}:{config.token}".encode()
-    ).decode()
-    request = Request(
-        f"{config.base_url}/rest/api/3/search/jql",
-        data=request_body,
-        headers={
-            "Accept": "application/json",
-            "Authorization": f"Basic {credentials}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+        if next_page_token is not None:
+            request_data["nextPageToken"] = next_page_token
 
-    try:
-        with urlopen(request, timeout=30) as response:
-            payload = json.loads(response.read())
-    except (HTTPError, URLError, json.JSONDecodeError) as exc:
-        raise ExportError(f"Jira request failed: {exc}") from exc
+        request = Request(
+            f"{config.base_url}/rest/api/3/search/jql",
+            data=json.dumps(request_data).encode(),
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Basic {credentials}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
 
-    issues = payload.get("issues") if isinstance(payload, dict) else None
-    if not isinstance(issues, list):
-        raise ExportError("Jira response does not contain an issues list")
-    return issues
+        try:
+            with urlopen(request, timeout=30) as response:
+                payload = json.loads(response.read())
+        except (HTTPError, URLError, json.JSONDecodeError) as exc:
+            raise ExportError(f"Jira request failed: {exc}") from exc
+
+        page_issues = payload.get("issues") if isinstance(payload, dict) else None
+        if not isinstance(page_issues, list):
+            raise ExportError("Jira response does not contain an issues list")
+        issues.extend(page_issues)
+
+        token = payload.get("nextPageToken")
+        if token is None:
+            return issues
+        if not isinstance(token, str) or not token or token in seen_tokens:
+            raise ExportError("Jira returned an invalid next page token")
+        seen_tokens.add(token)
+        next_page_token = token
 
 
 def issue_to_row(issue: dict[str, Any]) -> dict[str, str]:

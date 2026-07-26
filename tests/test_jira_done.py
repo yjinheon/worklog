@@ -1,6 +1,45 @@
+from __future__ import annotations
+
+import csv
+import json
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import jira_done
+
+
+class FakeResponse:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self.payload = json.dumps(payload).encode()
+
+    def __enter__(self) -> FakeResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.payload
+
+
+def sample_issue() -> dict[str, object]:
+    return {
+        "key": "DC-847",
+        "fields": {
+            "summary": "[Data] TASON 구글 트렌드 API 구축",
+            "created": "2026-06-29T17:16:07.528+0900",
+            "resolutiondate": "2026-06-30T15:47:04.271+0900",
+            "parent": {
+                "key": "DC-592",
+                "fields": {
+                    "summary": "[Data] 내부 데이터 파이프라인 구축작업",
+                    "issuetype": {"name": "에픽"},
+                },
+            },
+        },
+    }
 
 
 class JiraDoneTests(unittest.TestCase):
@@ -18,6 +57,61 @@ class JiraDoneTests(unittest.TestCase):
             period.default_output,
             "jira_done_20260601_20260630_selected.csv",
         )
+
+    def test_main_exports_one_page_in_selected_csv_format(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config = root / "config.yaml"
+            output = root / "result.csv"
+            config.write_text(
+                "JIRA_BASE_URL: https://example.atlassian.net\n"
+                "JIRA_EMAIL: worker@example.com\n",
+                encoding="utf-8",
+            )
+            response = FakeResponse({"issues": [sample_issue()], "isLast": True})
+
+            with (
+                patch.dict(
+                    "os.environ", {"JIRA_API_TOKEN": "test-token"}, clear=True
+                ),
+                patch("jira_done.urlopen", return_value=response) as request,
+            ):
+                result = jira_done.main(
+                    [
+                        "--start",
+                        "2026-06-01",
+                        "--end",
+                        "2026-06-30",
+                        "--config",
+                        str(config),
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+            with output.open(encoding="utf-8-sig", newline="") as stream:
+                rows = list(csv.DictReader(stream))
+
+        self.assertEqual(result, 0)
+        self.assertEqual(
+            rows,
+            [
+                {
+                    "issue_key": "DC-847",
+                    "task_name": "[Data] TASON 구글 트렌드 API 구축",
+                    "start_time": "2026-06-29T17:16:07.528+0900",
+                    "done_time": "2026-06-30T15:47:04.271+0900",
+                    "epic_key": "DC-592",
+                    "epic_name": "[Data] 내부 데이터 파이프라인 구축작업",
+                    "parent_type": "에픽",
+                }
+            ],
+        )
+        sent = json.loads(request.call_args.args[0].data)
+        self.assertEqual(
+            sent["fields"], ["summary", "created", "resolutiondate", "parent"]
+        )
+        self.assertIn('resolutiondate < "2026-07-01"', sent["jql"])
 
 
 if __name__ == "__main__":

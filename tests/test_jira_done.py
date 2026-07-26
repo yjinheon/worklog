@@ -3,9 +3,12 @@ from __future__ import annotations
 import csv
 import json
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from urllib.error import URLError
 
 import jira_done
 
@@ -164,6 +167,175 @@ class JiraDoneTests(unittest.TestCase):
         self.assertEqual(rows[1]["parent_type"], "")
         second_body = json.loads(request.call_args_list[1].args[0].data)
         self.assertEqual(second_body["nextPageToken"], "page-2")
+
+    def test_main_rejects_invalid_or_reversed_dates_before_request(self) -> None:
+        for start, end in (
+            ("2026-02-30", "2026-03-01"),
+            ("2026-07-01", "2026-06-30"),
+        ):
+            with self.subTest(start=start, end=end):
+                stderr = StringIO()
+                with (
+                    patch("jira_done.urlopen") as request,
+                    redirect_stderr(stderr),
+                ):
+                    result = jira_done.main(["--start", start, "--end", end])
+
+                self.assertEqual(result, 1)
+                self.assertTrue(stderr.getvalue().startswith("ERROR:"))
+                request.assert_not_called()
+
+    def test_main_writes_bom_and_header_for_empty_result(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config = root / "config.yaml"
+            output = root / "empty.csv"
+            config.write_text(
+                "JIRA_BASE_URL: https://example.atlassian.net\n"
+                "JIRA_EMAIL: worker@example.com\n",
+                encoding="utf-8",
+            )
+            with (
+                patch.dict(
+                    "os.environ", {"JIRA_API_TOKEN": "test-token"}, clear=True
+                ),
+                patch(
+                    "jira_done.urlopen",
+                    return_value=FakeResponse({"issues": [], "isLast": True}),
+                ),
+            ):
+                result = jira_done.main(
+                    [
+                        "--start",
+                        "2026-06-01",
+                        "--end",
+                        "2026-06-30",
+                        "--config",
+                        str(config),
+                        "--output",
+                        str(output),
+                    ]
+                )
+            raw = output.read_bytes()
+
+        self.assertEqual(result, 0)
+        self.assertTrue(raw.startswith(b"\xef\xbb\xbf"))
+        self.assertEqual(
+            raw.decode("utf-8-sig").strip(), ",".join(jira_done.CSV_FIELDS)
+        )
+
+    def test_main_preserves_existing_output_when_api_fails(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config = root / "config.yaml"
+            output = root / "result.csv"
+            config.write_text(
+                "JIRA_BASE_URL: https://example.atlassian.net\n"
+                "JIRA_EMAIL: worker@example.com\n",
+                encoding="utf-8",
+            )
+            output.write_text("existing", encoding="utf-8")
+
+            with (
+                patch.dict(
+                    "os.environ", {"JIRA_API_TOKEN": "test-token"}, clear=True
+                ),
+                patch("jira_done.urlopen", side_effect=URLError("offline")),
+                redirect_stderr(StringIO()),
+            ):
+                result = jira_done.main(
+                    [
+                        "--start",
+                        "2026-06-01",
+                        "--end",
+                        "2026-06-30",
+                        "--config",
+                        str(config),
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+            self.assertEqual(result, 1)
+            self.assertEqual(output.read_text(encoding="utf-8"), "existing")
+
+    def test_config_falls_back_to_legacy_token_with_warning(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config = root / "config.yaml"
+            output = root / "result.csv"
+            config.write_text(
+                "CONFLUENCE_BASE_URL: https://example.atlassian.net\n"
+                "CONFLUENCE_EMAIL: worker@example.com\n"
+                "CONFLUENCE_TOKEN: legacy-token\n",
+                encoding="utf-8",
+            )
+            stderr = StringIO()
+            with (
+                patch.dict("os.environ", {}, clear=True),
+                patch(
+                    "jira_done.urlopen",
+                    return_value=FakeResponse({"issues": []}),
+                ),
+                redirect_stderr(stderr),
+            ):
+                result = jira_done.main(
+                    [
+                        "--start",
+                        "2026-06-01",
+                        "--end",
+                        "2026-06-30",
+                        "--config",
+                        str(config),
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+        self.assertEqual(result, 0)
+        self.assertIn("WARNING:", stderr.getvalue())
+        self.assertNotIn("legacy-token", stderr.getvalue())
+
+    def test_main_reports_malformed_issue_without_replacing_output(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config = root / "config.yaml"
+            output = root / "result.csv"
+            config.write_text(
+                "JIRA_BASE_URL: https://example.atlassian.net\n"
+                "JIRA_EMAIL: worker@example.com\n",
+                encoding="utf-8",
+            )
+            output.write_text("existing", encoding="utf-8")
+            stderr = StringIO()
+            with (
+                patch.dict(
+                    "os.environ", {"JIRA_API_TOKEN": "test-token"}, clear=True
+                ),
+                patch(
+                    "jira_done.urlopen",
+                    return_value=FakeResponse(
+                        {"issues": [{"key": "DC-1", "fields": []}]}
+                    ),
+                ),
+                redirect_stderr(stderr),
+            ):
+                result = jira_done.main(
+                    [
+                        "--start",
+                        "2026-06-01",
+                        "--end",
+                        "2026-06-30",
+                        "--config",
+                        str(config),
+                        "--output",
+                        str(output),
+                    ]
+                )
+
+            self.assertEqual(result, 1)
+            self.assertTrue(stderr.getvalue().startswith("ERROR:"))
+            self.assertEqual(output.read_text(encoding="utf-8"), "existing")
 
 
 if __name__ == "__main__":

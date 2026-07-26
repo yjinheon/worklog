@@ -162,10 +162,34 @@ def search_issues(config: JiraConfig, jql: str) -> list[dict[str, Any]]:
 
 def issue_to_row(issue: dict[str, Any]) -> dict[str, str]:
     """Convert a Jira issue response object to the selected CSV schema."""
-    fields = issue.get("fields") or {}
-    parent = fields.get("parent") or {}
-    parent_fields = parent.get("fields") or {}
-    issue_type = parent_fields.get("issuetype") or {}
+    fields = issue.get("fields")
+    if not isinstance(fields, dict):
+        raise ExportError("Jira issue fields must be an object")
+
+    parent_value = fields.get("parent")
+    if parent_value is None:
+        parent: dict[str, Any] = {}
+    elif isinstance(parent_value, dict):
+        parent = parent_value
+    else:
+        raise ExportError("Jira issue parent must be an object or null")
+
+    parent_fields_value = parent.get("fields")
+    if parent_fields_value is None:
+        parent_fields: dict[str, Any] = {}
+    elif isinstance(parent_fields_value, dict):
+        parent_fields = parent_fields_value
+    else:
+        raise ExportError("Jira parent fields must be an object")
+
+    issue_type_value = parent_fields.get("issuetype")
+    if issue_type_value is None:
+        issue_type: dict[str, Any] = {}
+    elif isinstance(issue_type_value, dict):
+        issue_type = issue_type_value
+    else:
+        raise ExportError("Jira parent issue type must be an object")
+
     return {
         "issue_key": str(issue.get("key") or ""),
         "task_name": str(fields.get("summary") or ""),

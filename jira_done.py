@@ -1,4 +1,8 @@
-#!/usr/bin/env -S uv run
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.13"
+# dependencies = ["pyyaml>=6.0.3"]
+# ///
 """Export completed Jira issues to the worklog CSV format."""
 
 from __future__ import annotations

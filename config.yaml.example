@@ -24,3 +24,7 @@ repos:
 
 task_tags: [feat, fix, refactor, perf, docs, test, chore, build, ci, style, revert]
 system_tags: [elasticsearch, clickhouse, dagster, airflow, kafka, dbt, kubernetes, redis]
+
+# Jira completion CSV exporter. Set the token through JIRA_API_TOKEN.
+JIRA_BASE_URL: https://example.atlassian.net
+JIRA_EMAIL: user@example.com

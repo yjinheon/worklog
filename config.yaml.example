@@ -28,3 +28,19 @@ system_tags: [elasticsearch, clickhouse, dagster, airflow, kafka, dbt, kubernete
 # Jira completion CSV exporter. Set the token through JIRA_API_TOKEN.
 JIRA_BASE_URL: https://example.atlassian.net
 JIRA_EMAIL: user@example.com
+
+# Jira issue creation (jira_create.py). Set the token through JIRA_API_TOKEN.
+# epic_map keys accept a group name or a project name; project wins over group.
+# Values accept an epic key, an epic name (substring match), or null to exclude.
+JIRA_PROJECT_KEY: DC
+worklog_dir: worklogs
+# Lines carrying only these task tags are bookkeeping, not a unit of work.
+skip_tags: [chore, style, ci]
+
+# 기본 계층은 Epic > Task > 하위 작업 3단계다.
+# 한 프로젝트+에픽 묶음이 이 수 이상이면 묶음 Task를 만들어 그 아래 하위 작업으로
+# 생성하고, 그보다 적으면 평범한 Task로 승격한다.
+min_group: 2
+epic_map:
+  data-engineering: DC-100
+  personal-kms: null

@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 config.yaml
+.jira_created.jsonl
 
 .omc
 __pycache__/
@@ -8,6 +9,9 @@ __pycache__/
 
 note
 repos.conf
+
+# Confluence exports may contain credentials pasted into page bodies
+docs/confluence/
 
 # C extensions
 *.so
@@ -214,3 +218,4 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+jira_plan_*.yaml

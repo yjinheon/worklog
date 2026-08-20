@@ -66,3 +66,19 @@ db-runs:
 # DB 초기화 — 다음 호출에서 새로 만들어짐
 db-reset:
     rm -f {{db}}
+
+# 11) 워크로그 -> Jira 이슈 생성 계획만 출력 (dry-run)
+jira-plan start end:
+    ./jira_create.py --start {{start}} --end {{end}}
+
+# 12) 편집한 계획 파일을 적용 (권장 경로)
+jira-from-plan plan:
+    ./jira_create.py --apply --from-plan {{plan}}
+
+# 13) 계획 확인 없이 바로 생성 (확인 프롬프트 있음)
+jira-apply start end:
+    ./jira_create.py --start {{start}} --end {{end}} --apply
+
+# 14) 완료 이슈 CSV 내보내기
+jira-done start end:
+    ./jira_done.py --start {{start}} --end {{end}}

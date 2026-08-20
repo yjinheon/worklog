@@ -77,7 +77,7 @@ class JiraDoneTests(unittest.TestCase):
                 patch.dict(
                     "os.environ", {"JIRA_API_TOKEN": "test-token"}, clear=True
                 ),
-                patch("jira_done.urlopen", return_value=response) as request,
+                patch("jira_client.urlopen", return_value=response) as request,
             ):
                 result = jira_done.main(
                     [
@@ -142,7 +142,7 @@ class JiraDoneTests(unittest.TestCase):
                 patch.dict(
                     "os.environ", {"JIRA_API_TOKEN": "test-token"}, clear=True
                 ),
-                patch("jira_done.urlopen", side_effect=responses) as request,
+                patch("jira_client.urlopen", side_effect=responses) as request,
             ):
                 result = jira_done.main(
                     [
@@ -176,7 +176,7 @@ class JiraDoneTests(unittest.TestCase):
             with self.subTest(start=start, end=end):
                 stderr = StringIO()
                 with (
-                    patch("jira_done.urlopen") as request,
+                    patch("jira_client.urlopen") as request,
                     redirect_stderr(stderr),
                 ):
                     result = jira_done.main(["--start", start, "--end", end])
@@ -200,7 +200,7 @@ class JiraDoneTests(unittest.TestCase):
                     "os.environ", {"JIRA_API_TOKEN": "test-token"}, clear=True
                 ),
                 patch(
-                    "jira_done.urlopen",
+                    "jira_client.urlopen",
                     return_value=FakeResponse({"issues": [], "isLast": True}),
                 ),
             ):
@@ -240,7 +240,7 @@ class JiraDoneTests(unittest.TestCase):
                 patch.dict(
                     "os.environ", {"JIRA_API_TOKEN": "test-token"}, clear=True
                 ),
-                patch("jira_done.urlopen", side_effect=URLError("offline")),
+                patch("jira_client.urlopen", side_effect=URLError("offline")),
                 redirect_stderr(StringIO()),
             ):
                 result = jira_done.main(
@@ -274,7 +274,7 @@ class JiraDoneTests(unittest.TestCase):
             with (
                 patch.dict("os.environ", {}, clear=True),
                 patch(
-                    "jira_done.urlopen",
+                    "jira_client.urlopen",
                     return_value=FakeResponse({"issues": []}),
                 ),
                 redirect_stderr(stderr),
@@ -313,7 +313,7 @@ class JiraDoneTests(unittest.TestCase):
                     "os.environ", {"JIRA_API_TOKEN": "test-token"}, clear=True
                 ),
                 patch(
-                    "jira_done.urlopen",
+                    "jira_client.urlopen",
                     return_value=FakeResponse(
                         {"issues": [{"key": "DC-1", "fields": []}]}
                     ),

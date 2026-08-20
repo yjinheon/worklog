@@ -8,20 +8,15 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import csv
-import json
-import os
 import sys
 import tempfile
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
-import yaml
+from jira_client import JiraConfig, JiraError, request
 
 CSV_FIELDS = (
     "issue_key",
@@ -34,53 +29,7 @@ CSV_FIELDS = (
 )
 
 
-class ExportError(Exception):
-    """A user-actionable export failure."""
-
-
-@dataclass(frozen=True)
-class JiraConfig:
-    """Credentials and endpoint settings for Jira Cloud."""
-
-    base_url: str
-    email: str
-    token: str
-    uses_legacy_token: bool = False
-
-    @classmethod
-    def load(cls, path: Path) -> JiraConfig:
-        """Load Jira settings from YAML and the process environment."""
-        if not path.is_file():
-            raise ExportError(f"config file not found: {path}")
-
-        try:
-            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except yaml.YAMLError as exc:
-            raise ExportError(f"cannot parse config: {path}: {exc}") from exc
-
-        if not isinstance(raw, dict):
-            raise ExportError(f"config root must be a mapping: {path}")
-
-        base_url = raw.get("JIRA_BASE_URL") or raw.get("CONFLUENCE_BASE_URL")
-        email = raw.get("JIRA_EMAIL") or raw.get("CONFLUENCE_EMAIL")
-        environment_token = os.environ.get("JIRA_API_TOKEN", "").strip()
-        legacy_token = raw.get("CONFLUENCE_TOKEN")
-        token = environment_token or legacy_token
-
-        for setting_name, value in (
-            ("Jira base URL", base_url),
-            ("Jira email", email),
-            ("Jira API token", token),
-        ):
-            if not isinstance(value, str) or not value.strip():
-                raise ExportError(f"missing {setting_name}")
-
-        return cls(
-            base_url=base_url.rstrip("/"),
-            email=email.strip(),
-            token=token.strip(),
-            uses_legacy_token=not environment_token,
-        )
+ExportError = JiraError
 
 
 @dataclass(frozen=True)
@@ -117,45 +66,27 @@ class DateRange:
 
 def search_issues(config: JiraConfig, jql: str) -> list[dict[str, Any]]:
     """Fetch every Jira issue page matching the supplied JQL."""
-    credentials = base64.b64encode(
-        f"{config.email}:{config.token}".encode()
-    ).decode()
     issues: list[dict[str, Any]] = []
     next_page_token: str | None = None
     seen_tokens: set[str] = set()
 
     while True:
-        request_data: dict[str, Any] = {
+        payload: dict[str, Any] = {
             "jql": jql,
             "fields": ["summary", "created", "resolutiondate", "parent"],
             "maxResults": 100,
         }
         if next_page_token is not None:
-            request_data["nextPageToken"] = next_page_token
+            payload["nextPageToken"] = next_page_token
 
-        request = Request(
-            f"{config.base_url}/rest/api/3/search/jql",
-            data=json.dumps(request_data).encode(),
-            headers={
-                "Accept": "application/json",
-                "Authorization": f"Basic {credentials}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
+        response = request(config, "POST", "/rest/api/3/search/jql", payload)
 
-        try:
-            with urlopen(request, timeout=30) as response:
-                payload = json.loads(response.read())
-        except (HTTPError, URLError, json.JSONDecodeError) as exc:
-            raise ExportError(f"Jira request failed: {exc}") from exc
-
-        page_issues = payload.get("issues") if isinstance(payload, dict) else None
+        page_issues = response.get("issues") if isinstance(response, dict) else None
         if not isinstance(page_issues, list):
             raise ExportError("Jira response does not contain an issues list")
         issues.extend(page_issues)
 
-        token = payload.get("nextPageToken")
+        token = response.get("nextPageToken")
         if token is None:
             return issues
         if not isinstance(token, str) or not token or token in seen_tokens:

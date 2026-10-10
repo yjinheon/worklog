@@ -219,3 +219,5 @@ __marimo__/
 jira_plan_*.yaml
 jira_migration_plan.yaml
 .jira_migration.jsonl
+.DS_Store
+scripts/.daily_log_update.ckpt

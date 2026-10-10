@@ -23,6 +23,8 @@ REFINE_SCRIPT = SCRIPT_DIR / "02_refine_commit_worklog.py"
 def extract_git_log(target_date: date, raw_path: Path) -> None:
     print(f"==> [1/2] extracting git log for {target_date}")
     env = os.environ.copy()
+    # OUTPUT here only steers 01_extract_git_raw.py (raw file). 02_refine_
+    # commit_worklog.py inherits the caller's OUTPUT for the refined file.
     env["OUTPUT"] = str(raw_path)
     # 각 스크립트는 자체 uv script shebang으로 의존성 해결
     result = subprocess.run([str(EXTRACT_SCRIPT), str(target_date)], env=env)
@@ -47,9 +49,9 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--backend",
         "-b",
-        choices=["claude", "gemini", "kimi", "codex", "auto"],
+        choices=["claude", "gemini", "kimi", "codex", "litellm", "auto"],
         default="auto",
-        help="LLM backend to use (default: auto)",
+        help="LLM backend to use (default: auto).",
     )
     args = parser.parse_args(argv[1:])
 

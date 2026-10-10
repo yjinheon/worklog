@@ -13,13 +13,13 @@ report-sessions date="":
 commit-log date="":
     ./00_run_commit_worklog.py {{date}}
 
-# 4) worklogs/DATE.md의 Projects·Highlights를 Obsidian 01.Project 노트에 반영
+# 4) Work 상세(/tmp/work-DATE.md) + 커밋 워크로그 → daily note 반영 (daily-log 먼저)
 obsidian-sync date:
-    ./03_sync_obsidian.py {{date}} --skip-run-worklog --worklog-path worklogs/{{date}}.md
+    ./03_sync_obsidian.py {{date}} --skip-run-worklog --worklog-path /tmp/work-{{date}}.md --commit-worklog /tmp/worklog-{{date}}.md
 
 # 5) Obsidian 반영 diff만 확인
 obsidian-dry date:
-    ./03_sync_obsidian.py {{date}} --skip-run-worklog --worklog-path worklogs/{{date}}.md --dry-run
+    ./03_sync_obsidian.py {{date}} --skip-run-worklog --worklog-path /tmp/work-{{date}}.md --commit-worklog /tmp/worklog-{{date}}.md --dry-run
 
 # 6) 워크로그 -> Jira 이슈 생성 계획만 출력 (dry-run)
 jira-plan start end:

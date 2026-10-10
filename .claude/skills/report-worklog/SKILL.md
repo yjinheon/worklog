@@ -1,6 +1,6 @@
 ---
 name: report-worklog
-description: Turn every DAILY_LOG.md session section for one date into a concise report-style Korean worklog (worklogs/YYYY-MM-DD.md) — Context / 이슈사항 / 검토사항 / 작업완료 사항, 개조식 명사형 bullets, 30 lines max — then appends the 00_run_commit_worklog.py commit worklog and syncs its project checkboxes to Obsidian 01.Project todos. Use when asked to write 오늘자/특정일 업무일지 for reporting (보고용), not for the Jira-facing bullet format.
+description: Turn every DAILY_LOG.md session section for one date into the Obsidian daily note Work block (detailed, no line limit, personal repos included) with task lines and Highlights, then distill a 30-line company worklog (worklogs/YYYY-MM-DD.md) from that Work block and append the commit worklog. Use when asked to write 오늘자/특정일 업무일지 for reporting (보고용), not for the Jira-facing bullet format.
 ---
 
 # report-worklog
@@ -22,33 +22,43 @@ merged file at `worklogs/<date>.md`.
 
 ## Workflow
 
-1. **Extract** — build the digest for the date:
+1. **Extract** — build the digest and the commit worklog for the date:
    ```bash
-   python .claude/skills/report-worklog/scripts/extract_sections.py 2026-08-28
+   just report-digest 2026-10-08            # DAILY_LOG digest (input)
+   OUTPUT=/tmp/worklog-2026-10-08.md ./00_run_commit_worklog.py 2026-10-08
    ```
-   Sections are merged in chronological order (세션 1 → N) and the
-   `Resume / Portfolio 반영 초안` blocks are stripped (they are a separate output).
-2. **Calibrate** — read the previous day's `worklogs/<date-1>.md` so wording and
-   granularity stay consistent across the series.
-3. **Write** `worklogs/<date>.md` per `reference.md`.
-4. **Verify** — report body (above the `---` line) must be ≤ 30 lines. If over, merge bullets; never truncate a section.
-5. **Append commit worklog** — run the git-commit refiner and append its output
-   below a `---` separator (verbatim, no rewording):
+2. **Work detail (daily-log first)** — the source of truth is the Obsidian
+   daily note's `## 03. Work` block, **not** the company worklog. Calibrate
+   against the previous day's `worklogs/<date-1>.md`, then write
+   `/tmp/work-<date>.md` in the same four headings as the company worklog
+   (`Context` / `이슈사항` / `검토사항` / `작업완료 사항`) with **no line or
+   bullet limit, personal repos included, every number and rationale kept**.
+   Append a `### Highlights` section (`#### <repo>` subheads + `- ` bullets)
+   — see `reference.md` § Highlights.
+3. **Sync daily note** — push the Work detail and the task lines:
    ```bash
-   OUTPUT=/tmp/worklog-<date>.md ./00_run_commit_worklog.py <date>
+   ./03_sync_obsidian.py <date> --skip-run-worklog \
+     --worklog-path /tmp/work-<date>.md \
+     --commit-worklog /tmp/worklog-<date>.md
+   ```
+   Writes the Work detail into the daily note's `## 03. Work` report block
+   and the commit-based task lines into `### Today`. It never writes into
+   existing `01.Project` notes (only creates a missing project note from
+   the template).
+4. **Company worklog (subset)** — pick **only the company work** out of the
+   daily note's Work block (drop `worklog-system` personal-repo items),
+   compress to 30 lines per `reference.md`, and write `worklogs/<date>.md`.
+5. **Append commit worklog** — below a `---` separator, verbatim, no
+   rewording (this is the part Jira reads):
+   ```bash
    printf '\n---\n\n' >> worklogs/<date>.md && cat /tmp/worklog-<date>.md >> worklogs/<date>.md
    ```
-   On rewrite, delete the blank line before `---` and everything below first so it is never appended twice.
-   If the refiner fails (exit ≠ 0 / raw fallback), skip the append and report it — do not hand-write it.
-   Then insert a `### Highlights` section just before `### Repositories` — see
-   `reference.md` § Highlights. This is the 작업관리·이직/면접 재료 layer, written for
-   *me*, not for the report reader.
-6. **Sync Obsidian** — push the appended `### Projects` checkboxes and `### Highlights` into
-   `~/workspace/astro-blog/01.Project/<project>/<project>_todo.md` (one auto block per date;
-   missing project folders are created from the project template):
-   ```bash
-   ./03_sync_obsidian.py <date> --skip-run-worklog --worklog-path worklogs/<date>.md
-   ```
+   On rewrite, delete the blank line before `---` and everything below first
+   so it is never appended twice. If the refiner fails (exit ≠ 0 / raw
+   fallback), skip the append and report it — do not hand-write it.
+6. **Verify** — report body (above `---`) ≤ 30 lines, and every company
+   bullet in the body appears in the daily note's Work block
+   (daily-log ⊇ company worklog).
 
 ## Hard constraints
 

@@ -98,6 +98,25 @@ Merge the smallest track into an adjacent bullet before exceeding the budget.
 | `### 남은 것 · 주의` | Backlog; belongs in the next day's input |
 | 요약 tables | Re-derived as bullets; tables blow the line budget |
 
+## Work detail (`/tmp/work-<date>.md` → daily note Work block)
+
+The **first** output of the flow: the full work record for the day, written
+before the company worklog. Same four bare-text headings as the report body
+(`Context` / `이슈사항` / `검토사항` / `작업완료 사항`), then an optional
+`### Highlights` (see § Highlights).
+
+- **No line or bullet budget.** Keep every measured number, rationale, and
+  verdict the digest contains.
+- **Personal repos included** (`worklog-system` group: lazyflow, local-flow,
+  my-scripts, worklog, …). The company worklog is the subset of this block
+  with those dropped.
+- Same bullet shape and grouping rules as the report body.
+- Plain `- ` bullets under `작업완료 사항` are stored as-is; only the
+  commit worklog's `### Projects` checkboxes become task lines.
+- The company worklog body (`---` 위) must be a **subset**: every company
+  bullet must appear (possibly reworded within the same 단위업무) in the Work
+  block.
+
 ## Verify
 
 ```bash
@@ -118,13 +137,17 @@ is personal — task tracking in Obsidian and raw material for 이직·면접.
 
 ## Highlights
 
-Written by hand (by the skill) into the appended block, just before `### Repositories`.
-Synced into each project's Obsidian note; ignored by Jira.
+Written by hand (by the skill) into **`/tmp/work-<date>.md`** — the daily
+note Work detail — as a `### Highlights` section after `작업완료 사항`.
+`03_sync_obsidian.py` retags each bullet to `- #highlight #project/<repo>`
+and stores it in the daily note's `## 03. Work` block. Highlights are **not**
+written to the company worklog file and not to any `01.Project` note
+(project notes read them via a dataview query on `#highlight`).
 
 ```
 ### Highlights
 
-#### <repo folder name — same as the #### heading in ### Projects>
+#### <repo folder name>
 - <문제/상황> — <조치(기술·판단)> — <결과(수치)>
 ```
 

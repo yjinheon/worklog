@@ -19,10 +19,12 @@ Env:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -270,6 +272,56 @@ def call_codex(prompt: str, *, work_dir: Path, timeout: int) -> str | None:
     return out
 
 
+def call_litellm(prompt: str, *, work_dir: Path, timeout: int) -> str | None:
+    """Refine through the local LiteLLM gateway (OpenAI-compatible chat API).
+
+    Needs LITELLM_BASE_URL + LITELLM_API_KEY (master key) in the environment.
+    """
+    base_url = os.environ.get("LITELLM_BASE_URL", "").rstrip("/")
+    api_key = os.environ.get("LITELLM_API_KEY", "")
+    if not base_url or not api_key:
+        print("  litellm not configured (LITELLM_BASE_URL/LITELLM_API_KEY)", file=sys.stderr)
+        return None
+
+    model = os.environ.get("LITELLM_GW_DEFAULT_MODEL", "gpt-4o-mini")
+    err_log = Path("/tmp/refine-litellm.err")
+    body = json.dumps(
+        {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 8000,
+            "temperature": 0.2,
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"{base_url}/chat/completions",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            data = json.load(response)
+    except Exception as exc:  # HTTPError, URLError, socket.timeout, bad JSON…
+        detail = getattr(exc, "read", lambda: b"")()
+        err_log.write_text(f"{exc}\n{detail.decode('utf-8', 'replace')}")
+        print(f"  litellm failed (see {err_log})", file=sys.stderr)
+        return None
+
+    try:
+        message = data["choices"][0]["message"]
+        out = _clean_output(message.get("content") or "")
+    except (KeyError, IndexError, TypeError):
+        err_log.write_text(json.dumps(data, ensure_ascii=False)[:2000])
+        print(f"  litellm returned unexpected shape (see {err_log})", file=sys.stderr)
+        return None
+    if not out:
+        print("  litellm returned empty output", file=sys.stderr)
+        return None
+    return out
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description="Refine raw worklog markdown via LLM."
@@ -277,7 +329,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("input_path", help="Path to the raw markdown file.")
     parser.add_argument(
         "--backend", "-b",
-        choices=["claude", "gemini", "kimi", "codex", "auto"],
+        choices=["claude", "gemini", "kimi", "codex", "litellm", "auto"],
         default="auto",
         help="LLM backend to use (default: auto)"
     )
@@ -321,8 +373,10 @@ def main(argv: list[str]) -> int:
         backends_to_try = ["kimi"]
     elif args.backend == "codex":
         backends_to_try = ["codex"]
+    elif args.backend == "litellm":
+        backends_to_try = ["litellm"]
     else:  # auto
-        backends_to_try = ["claude", "gemini", "kimi", "codex"]
+        backends_to_try = ["litellm", "claude", "gemini", "kimi", "codex"]
 
     for backend in backends_to_try:
         if backend == "claude":

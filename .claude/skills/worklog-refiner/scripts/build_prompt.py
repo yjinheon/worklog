@@ -156,7 +156,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         "--input",
         required=True,
         type=Path,
-        help="raw markdown produced by daily_worklog.py",
+        help="raw markdown produced by 01_extract_git_raw.py",
     )
     p.add_argument(
         "--config",

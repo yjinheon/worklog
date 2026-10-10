@@ -15,6 +15,7 @@ The default run is a dry run; --apply is required to write anything.
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import re
@@ -31,7 +32,6 @@ import epic_classifier as ec
 import issue_plan
 import work_triage
 from jira_client import JiraConfig, JiraError, request
-from refine_worklog import call_claude, call_gemini, call_kimi
 from issue_plan import IssuePlan, PlanError, PlannedTask
 from jira_issue import (
     DEFAULT_SKIP_TAGS,
@@ -59,6 +59,10 @@ from jira_issue import (
 )
 from jira_issue import _meta_values  # noqa: F401 - fetchers below rely on it
 from worklog_parser import WorkItem, has_issue_reference, load_range
+
+# digit-leading module name: import statement can't reference it
+_refine = importlib.import_module("02_refine_commit_worklog")
+call_claude, call_gemini, call_kimi = _refine.call_claude, _refine.call_gemini, _refine.call_kimi
 
 DEFAULT_PROJECT_KEY = "DC"
 STATE_FILENAME = ".jira_created.jsonl"

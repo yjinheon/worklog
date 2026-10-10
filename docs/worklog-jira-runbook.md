@@ -5,8 +5,8 @@ git commit → 일일 워크로그 → Jira 이슈로 이어지는 하루 흐름
 ## 매일 하는 일
 
 ```bash
-# 1. 워크로그 생성 (git log를 LLM이 정리)
-./hh_worklog.py 2026-08-19 -o worklogs/2026-08-19.md
+# 1. 워크로그 생성 — report-worklog 스킬 (docs/worklog-obsidian-runbook.md)
+#    Jira는 worklogs/<date>.md의 `---` 아래 `### Projects` 체크박스만 읽는다
 
 # 2. 생성 계획 확인 (Jira에 쓰지 않음)
 just jira-plan 2026-08-19 2026-08-19
@@ -122,8 +122,8 @@ LLM이 매번 다르게 요약하므로 key가 달라져 링크를 복원할 수
 
 | 파일 | 역할 |
 |---|---|
-| `daily_worklog.py` | repo들의 git log를 raw 마크다운으로 추출 |
-| `hh_worklog.py` | raw → 일일 워크로그 (LLM) |
+| `01_extract_git_raw.py` | repo들의 git log를 raw 마크다운으로 추출 |
+| `00_run_commit_worklog.py` / `02_refine_commit_worklog.py` | raw → `### Projects` 형식 워크로그 (LLM) |
 | `worklog_parser.py` | 워크로그 → 작업 항목 |
 | `work_triage.py` | 항목별 레벨 판정 (task / subtask / skip) |
 | `epic_classifier.py` | 항목 → Epic 배정 |

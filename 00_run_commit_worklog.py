@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-"""run_worklog.py — Orchestrate daily worklog extraction + LLM refinement.
+"""00_run_commit_worklog.py — Orchestrate daily worklog extraction + LLM refinement.
 
 Usage:
-    run_worklog.py [DATE]   # DATE=YYYY-MM-DD, defaults to today
+    00_run_commit_worklog.py [DATE]   # DATE=YYYY-MM-DD, defaults to today
 """
 
 from __future__ import annotations
@@ -16,8 +16,8 @@ from datetime import date, datetime
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-EXTRACT_SCRIPT = SCRIPT_DIR / "daily_worklog.py"
-REFINE_SCRIPT = SCRIPT_DIR / "refine_worklog.py"
+EXTRACT_SCRIPT = SCRIPT_DIR / "01_extract_git_raw.py"
+REFINE_SCRIPT = SCRIPT_DIR / "02_refine_commit_worklog.py"
 
 
 def extract_git_log(target_date: date, raw_path: Path) -> None:
@@ -47,7 +47,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "--backend",
         "-b",
-        choices=["claude", "gemini", "auto"],
+        choices=["claude", "gemini", "kimi", "codex", "auto"],
         default="auto",
         help="LLM backend to use (default: auto)",
     )

@@ -39,7 +39,7 @@ class HhWorklogTests(unittest.TestCase):
     def test_build_prompt_documents_the_issue_link(self) -> None:
         prompt = hh_worklog.build_prompt("# raw", "1. 질문")
 
-        self.assertIn("[DC-123](https://humuson.atlassian.net/browse/DC-123)", prompt)
+        self.assertIn("[DL-123](https://humuson.atlassian.net/browse/DL-123)", prompt)
         self.assertIn("근거가 없으면 생략", prompt)
         self.assertIn("jira_create.py", prompt)
 
@@ -48,7 +48,16 @@ class HhWorklogTests(unittest.TestCase):
             "# raw", "1. 질문", {"JIRA_BASE_URL": "https://acme.atlassian.net"}
         )
 
-        self.assertIn("https://acme.atlassian.net/browse/DC-123", prompt)
+        self.assertIn("https://acme.atlassian.net/browse/DL-123", prompt)
+
+    def test_build_prompt_uses_the_configured_project_key(self) -> None:
+        prompt = hh_worklog.build_prompt(
+            "# raw", "1. 질문", {"JIRA_PROJECT_KEY": "ABC"}
+        )
+
+        self.assertIn("[ABC-123](https://humuson.atlassian.net/browse/ABC-123)", prompt)
+        self.assertIn("이슈 key(ABC-숫자)", prompt)
+        self.assertNotIn("DC-123", prompt)
 
     def test_build_prompt_demands_short_noun_form_summaries(self) -> None:
         prompt = hh_worklog.build_prompt("# raw", "1. 질문")

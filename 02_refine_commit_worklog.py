@@ -3,11 +3,11 @@
 # requires-python = ">=3.12"
 # dependencies = []
 # ///
-"""refine_worklog.py — Refine raw worklog markdown via Claude (subscription) with Gemini fallback.
+"""02_refine_commit_worklog.py — Refine raw worklog markdown via Claude (subscription) with Gemini fallback.
 
 Usage:
-    ./refine_worklog.py <raw-md-path>
-    OUTPUT=/path/to/out.md ./refine_worklog.py /tmp/worklog-2026-04-20.raw.md
+    ./02_refine_commit_worklog.py <raw-md-path>
+    OUTPUT=/path/to/out.md ./02_refine_commit_worklog.py /tmp/worklog-2026-04-20.raw.md
 
 Env:
     OUTPUT       Destination markdown path. Default: ~/workspace/worklog/<date>.md
@@ -37,6 +37,9 @@ API_KEY_ENV_VARS = (
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
     "GOOGLE_APPLICATION_CREDENTIALS",
+    "KIMI_API_KEY",
+    "MOONSHOT_API_KEY",
+    "OPENAI_API_KEY",
 )
 
 
@@ -183,6 +186,90 @@ def call_gemini(prompt: str, *, work_dir: Path, timeout: int) -> str | None:
     return out
 
 
+def call_kimi(prompt: str, *, work_dir: Path, timeout: int) -> str | None:
+    if shutil.which("kimi") is None:
+        print("  kimi not installed", file=sys.stderr)
+        return None
+
+    err_log = Path("/tmp/refine-kimi.err")
+    try:
+        result = subprocess.run(
+            [
+                "kimi",
+                "--print",
+                "-p", prompt,
+                "--output-format", "text",
+            ],
+            cwd=work_dir,
+            env=_subscription_env(),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        err_log.write_text("kimi timed out\n")
+        print(f"  kimi failed (timeout; see {err_log})", file=sys.stderr)
+        return None
+
+    if result.returncode != 0:
+        err_log.write_text(result.stderr)
+        print(f"  kimi failed (see {err_log})", file=sys.stderr)
+        return None
+
+    out = _clean_output(result.stdout)
+    if not out:
+        print("  kimi returned empty output", file=sys.stderr)
+        return None
+    return out
+
+
+def call_codex(prompt: str, *, work_dir: Path, timeout: int) -> str | None:
+    if shutil.which("codex") is None:
+        print("  codex not installed", file=sys.stderr)
+        return None
+
+    err_log = Path("/tmp/refine-codex.err")
+    out_log = Path("/tmp/refine-codex.out")
+    out_log.unlink(missing_ok=True)
+    try:
+        result = subprocess.run(
+            [
+                "codex",
+                "exec",
+                "--sandbox",
+                "read-only",
+                "--cd",
+                str(work_dir),
+                "--skip-git-repo-check",
+                "--output-last-message",
+                str(out_log),
+                "-",
+            ],
+            cwd=work_dir,
+            env=_subscription_env(),
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        err_log.write_text("codex timed out\n")
+        print(f"  codex failed (timeout; see {err_log})", file=sys.stderr)
+        return None
+
+    if result.returncode != 0:
+        err_log.write_text(result.stderr)
+        print(f"  codex failed (see {err_log})", file=sys.stderr)
+        return None
+
+    raw_out = out_log.read_text(encoding="utf-8") if out_log.is_file() else result.stdout
+    out = _clean_output(raw_out)
+    if not out:
+        print("  codex returned empty output", file=sys.stderr)
+        return None
+    return out
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description="Refine raw worklog markdown via LLM."
@@ -190,7 +277,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("input_path", help="Path to the raw markdown file.")
     parser.add_argument(
         "--backend", "-b",
-        choices=["claude", "gemini", "auto"],
+        choices=["claude", "gemini", "kimi", "codex", "auto"],
         default="auto",
         help="LLM backend to use (default: auto)"
     )
@@ -230,14 +317,22 @@ def main(argv: list[str]) -> int:
         backends_to_try = ["claude"]
     elif args.backend == "gemini":
         backends_to_try = ["gemini"]
+    elif args.backend == "kimi":
+        backends_to_try = ["kimi"]
+    elif args.backend == "codex":
+        backends_to_try = ["codex"]
     else:  # auto
-        backends_to_try = ["claude", "gemini"]
+        backends_to_try = ["claude", "gemini", "kimi", "codex"]
 
     for backend in backends_to_try:
         if backend == "claude":
             result = call_claude(prompt, work_dir=work_dir, timeout=timeout)
         elif backend == "gemini":
             result = call_gemini(prompt, work_dir=work_dir, timeout=timeout)
+        elif backend == "kimi":
+            result = call_kimi(prompt, work_dir=work_dir, timeout=timeout)
+        elif backend == "codex":
+            result = call_codex(prompt, work_dir=work_dir, timeout=timeout)
 
         if result is not None:
             used = backend

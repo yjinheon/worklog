@@ -7,7 +7,7 @@
 
 Two refined layouts exist in this repository and both are supported:
 
-- "projects" (refine_worklog.py output, 2026-04 ~ 2026-06)
+- "projects" (02_refine_commit_worklog.py output, 2026-04 ~ 2026-06)
       #### <project>
       - [x] 요약 #project/<project> #todo #feat  [due:: ...]  [completion:: ...]
 
@@ -16,7 +16,7 @@ Two refined layouts exist in this repository and both are supported:
 
       - [<project>] [feat, tag] 요약 #project/<project> #feat
 
-Raw git-log dumps (daily_worklog.py output) carry no task breakdown and are
+Raw git-log dumps (01_extract_git_raw.py output) carry no task breakdown and are
 skipped rather than guessed at.
 """
 

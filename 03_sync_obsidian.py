@@ -3,9 +3,9 @@
 """Sync refined daily worklog tasks into Obsidian project todo notes.
 
 Usage:
-    sync_worklog_to_obsidian.py [DATE]
-    sync_worklog_to_obsidian.py 2026-05-23 --dry-run
-    sync_worklog_to_obsidian.py 2026-05-23 --skip-run-worklog
+    03_sync_obsidian.py [DATE]
+    03_sync_obsidian.py 2026-05-23 --dry-run
+    03_sync_obsidian.py 2026-05-23 --skip-run-worklog
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from pathlib import Path
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-RUN_WORKLOG = SCRIPT_DIR / "run_worklog.py"
+RUN_WORKLOG = SCRIPT_DIR / "00_run_commit_worklog.py"
 DEFAULT_VAULT_ROOT = Path("~/workspace/astro-blog").expanduser()
 WORKLOG_START = "%% worklog:auto:start"
 WORKLOG_END = "%% worklog:auto:end %%"
@@ -34,6 +34,7 @@ class ParsedWorklog:
     open_tasks: list[str]
     completed_tasks: list[str]
     repository_items: list[str]
+    highlights_by_project: dict[str, list[str]]
 
 
 def parse_date(value: str | None) -> date:
@@ -61,7 +62,7 @@ def run_worklog(target_date: date, backend: str) -> None:
         cwd=SCRIPT_DIR,
     )
     if result.returncode != 0:
-        sys.exit(f"ERROR: run_worklog.py failed (exit={result.returncode})")
+        sys.exit(f"ERROR: 00_run_commit_worklog.py failed (exit={result.returncode})")
 
 
 def read_text(path: Path) -> str:
@@ -128,6 +129,16 @@ def parse_worklog(content: str) -> ParsedWorklog:
         for line in repositories.splitlines()
         if line.strip().startswith("- ") and not line.strip().startswith("- [")
     ]
+
+    # Highlights: per-project 문제 → 조치 → 결과(수치) bullets, kept as interview material.
+    highlights_by_project: dict[str, list[str]] = {}
+    current_project = None
+    for line in extract_section(content, "### Highlights", 3).splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#### "):
+            current_project = stripped.removeprefix("#### ").strip()
+        elif current_project and stripped.startswith("- ") and not stripped.startswith("- ["):
+            highlights_by_project.setdefault(current_project, []).append(stripped)
     return ParsedWorklog(
         project_tasks=dedupe(project_tasks),
         tasks_by_project={
@@ -138,6 +149,7 @@ def parse_worklog(content: str) -> ParsedWorklog:
         open_tasks=dedupe(open_tasks),
         completed_tasks=dedupe(completed_tasks),
         repository_items=dedupe(repository_items),
+        highlights_by_project=highlights_by_project,
     )
 
 
@@ -270,17 +282,19 @@ sort due asc
 
 
 def replace_or_insert_auto_block(today_body: str, block: str) -> str:
+    # Replace only the block with the same start marker (same date/project),
+    # so earlier dates' blocks accumulate instead of being overwritten.
     pattern = re.compile(
-        rf"\n?{re.escape(WORKLOG_START)}[^\n]*\n.*?\n{re.escape(WORKLOG_END)}\n?",
+        rf"\n?{re.escape(block.splitlines()[0])}\n.*?\n{re.escape(WORKLOG_END)}\n?",
         re.DOTALL,
     )
     if pattern.search(today_body):
-        return pattern.sub(f"\n{block}\n", today_body).strip("\n")
+        return pattern.sub(lambda _: f"\n{block}\n", today_body).strip("\n")
 
     lines = today_body.splitlines()
     insert_at: int | None = None
     for idx, line in enumerate(lines):
-        if line.strip().startswith("- ["):
+        if line.strip().startswith("- [") or line.strip() == WORKLOG_END:
             insert_at = idx + 1
 
     if insert_at is None:
@@ -347,13 +361,78 @@ def sync_today_section(content: str, target_date: date, block: str) -> str:
 
 
 def new_project_todo(project: str) -> str:
+    """Project note template (01.Project/workspace/workspace_todo.md) + Worklog."""
     today = date.today().isoformat()
+    tag = f"#project/{project}"
     return f"""---
+title: {project}
+status: IN_PROGRESS
+tag:
+  - project/{project}
 created: {today}
 updated: {today}
 ---
 
-# {project}
+## Goal
+
+- 뭔가 프로젝트 목표적기
+
+```dataview
+TABLE
+  T.text AS "작업 내용",
+  T.due AS "마감일",
+  T.completion AS "완료일",
+  choice(T.completed, "완료", "진행중") AS "상태"
+FROM {tag}
+FLATTEN file.tasks AS T
+WHERE contains(T.tags, "{tag}")
+```
+
+## Files
+
+```dataview
+TABLE
+alias AS "Description" , dateformat(updated,"yyyy-MM-dd") as updated
+from {tag}
+SORT file.path ASCENDING
+```
+
+## Last Update
+
+```dataviewjs
+const cfile = dv.current().file;
+const list = dv.pages(`"${{cfile.folder}}"`)
+    .filter(b => b.file.name != cfile.name)
+    .sort(b => b.file.cday)
+    .map(b => b.file.link);
+dv.list(list);
+```
+
+## Todo
+
+```dataview
+list from {tag}
+where contains(status,"todo")
+SORT file.path ASCENDING
+```
+
+## In Progress
+
+```dataview
+list from {tag}
+where contains(status,"IN_PROGRESS")
+SORT file.path ASCENDING
+```
+
+## Done
+
+```dataview
+list from {tag}
+where contains(status,"DONE")
+SORT file.path ASCENDING
+```
+
+## Reference
 
 ## Worklog
 """
@@ -422,9 +501,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--backend",
         "-b",
-        choices=["claude", "gemini", "auto"],
+        choices=["claude", "gemini", "kimi", "codex", "auto"],
         default="auto",
-        help="LLM backend for run_worklog.py (default: auto).",
+        help="LLM backend for 00_run_commit_worklog.py (default: auto).",
     )
     parser.add_argument(
         "--vault-root",
@@ -441,7 +520,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--skip-run-worklog",
         action="store_true",
-        help="Use an existing refined worklog file without running run_worklog.py.",
+        help="Use an existing refined worklog file without running 00_run_commit_worklog.py.",
     )
     parser.add_argument(
         "--dry-run",
@@ -475,8 +554,11 @@ def main(argv: list[str]) -> int:
     vault_root = args.vault_root.expanduser()
     changes: list[tuple[Path, Path, str, str]] = []
 
-    for project, tasks in parsed.tasks_by_project.items():
-        block = build_project_block(target_date, project, tasks)
+    projects = dict.fromkeys([*parsed.tasks_by_project, *parsed.highlights_by_project])
+    for project in projects:
+        tasks = parsed.tasks_by_project.get(project, [])
+        highlights = parsed.highlights_by_project.get(project, [])
+        block = build_project_block(target_date, project, tasks + highlights)
         relative_path = project_todo_path(project)
         path = vault_root / relative_path
         before = read_text(path) if path.is_file() else new_project_todo(project)

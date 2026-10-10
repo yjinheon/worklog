@@ -7,7 +7,7 @@ description: Build the LLM prompt that converts a raw multi-repo git-commit dige
 
 Assembles the prompt sent to an LLM to refine a daily `raw.md` (aggregated git commits from multiple repos) into a standardized worklog.
 
-Consumed by `refine_worklog.py`, which calls Claude (subscription OAuth) first and falls back to Gemini on failure.
+Consumed by `02_refine_commit_worklog.py`, which calls Claude (subscription OAuth) first and falls back to Gemini on failure.
 
 ## Files
 
@@ -24,14 +24,14 @@ python .claude/skills/worklog-refiner/scripts/build_prompt.py \
     --input /tmp/worklog-2026-04-20.raw.md \
     --vocab ~/workspace/worklog/vocab.yaml
 
-# Imported from refine_worklog.py
+# Imported from 02_refine_commit_worklog.py
 from build_prompt import build_prompt
 prompt = build_prompt(input_path=..., vocab_path=...)
 ```
 
 ## Input contract
 
-- `input_path` (required): raw markdown file produced by `daily_worklog.py`, typically `/tmp/worklog-<date>.raw.md`.
+- `input_path` (required): raw markdown file produced by `01_extract_git_raw.py`, typically `/tmp/worklog-<date>.raw.md`.
 - `vocab_path` (optional): YAML containing `projects`, `repo_mapping`, `task_tags`, `system_tags`. Omit if not available — the prompt degrades gracefully.
 
 ## Output contract

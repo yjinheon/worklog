@@ -10,8 +10,6 @@ __pycache__/
 note
 repos.conf
 
-# Confluence exports may contain credentials pasted into page bodies
-docs/confluence/
 
 # C extensions
 *.so
@@ -219,3 +217,5 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 jira_plan_*.yaml
+jira_migration_plan.yaml
+.jira_migration.jsonl

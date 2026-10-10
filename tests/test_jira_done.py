@@ -51,7 +51,7 @@ class JiraDoneTests(unittest.TestCase):
 
         self.assertEqual(
             period.jql(),
-            'project = DC AND assignee = currentUser() '
+            'project = DL AND assignee = currentUser() '
             'AND resolutiondate >= "2026-06-01" '
             'AND resolutiondate < "2026-07-01" '
             'ORDER BY resolutiondate DESC',

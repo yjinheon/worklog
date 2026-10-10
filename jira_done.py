@@ -52,7 +52,7 @@ class DateRange:
         """Build JQL whose exclusive upper bound includes the full end date."""
         end_exclusive = self.end + timedelta(days=1)
         return (
-            "project = DC AND assignee = currentUser() "
+            "project = DL AND assignee = currentUser() "
             f'AND resolutiondate >= "{self.start.isoformat()}" '
             f'AND resolutiondate < "{end_exclusive.isoformat()}" '
             "ORDER BY resolutiondate DESC"
@@ -165,7 +165,7 @@ def write_csv(path: Path, issues: list[dict[str, Any]]) -> None:
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(
-        description="Export completed DC Jira issues to CSV."
+        description="Export completed DL Jira issues to CSV."
     )
     parser.add_argument(
         "--start", required=True, help="Inclusive start date (YYYY-MM-DD)."

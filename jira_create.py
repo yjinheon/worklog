@@ -64,7 +64,7 @@ from worklog_parser import WorkItem, has_issue_reference, load_range
 _refine = importlib.import_module("02_refine_commit_worklog")
 call_claude, call_gemini, call_kimi = _refine.call_claude, _refine.call_gemini, _refine.call_kimi
 
-DEFAULT_PROJECT_KEY = "DC"
+DEFAULT_PROJECT_KEY = "DL"
 STATE_FILENAME = ".jira_created.jsonl"
 # Worklogs live here when the repo root has been tidied up.
 WORKLOG_DIRECTORY_CANDIDATES = ("worklogs", ".")

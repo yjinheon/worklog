@@ -35,7 +35,7 @@ PROMPT_HEADER = """다음 작업 목록을 각각 가장 알맞은 Jira Epic에 
 - 출력은 JSON 배열 하나만. 설명, 코드블록, 사족 금지
 
 [출력 형식]
-[{"key": "<작업 key>", "epic_key": "DC-123" 또는 null}]
+[{"key": "<작업 key>", "epic_key": "<Epic key>" 또는 null}]
 """
 
 

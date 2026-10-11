@@ -114,6 +114,13 @@ class ReportBodyTest(unittest.TestCase):
         self.assertIn("Context", body)
         self.assertNotIn("### Projects", body)
 
+    def test_work_detail_drops_raw_highlights(self) -> None:
+        # 원문 Highlights는 build_report_block이 #highlight 줄로 따로 붙인다
+        text = "Context\n\n내용\n\n작업완료 사항\n\n- 완료\n\n### Highlights\n\n#### demo\n- h\n"
+        body = sync.report_body(text)
+        self.assertIn("- 완료", body)
+        self.assertNotIn("Highlights", body)
+
 
 class DailyNoteTest(unittest.TestCase):
     TEMPLATE = (

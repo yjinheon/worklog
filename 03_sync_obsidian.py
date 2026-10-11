@@ -264,6 +264,8 @@ def report_body(content: str) -> str:
 
     sep = content.find("\n---\n")
     upper = content[:sep].rstrip() if sep != -1 else content
+    # 원문 Highlights는 build_report_block이 #highlight 줄로 붙이므로 본문에서는 뺀다
+    upper = re.split(r"^###\s+Highlights\s*$", upper, maxsplit=1, flags=re.MULTILINE)[0].rstrip()
     has_projects = re.search(r"^###\s+Projects\s*:?\s*$", content, re.MULTILINE)
 
     if has_projects and sep == -1:

@@ -320,6 +320,32 @@ class MainSyncTest(unittest.TestCase):
         self.assertIn("SORT T.completion DESC", fresh.read_text(encoding="utf-8"))
         self.assertFalse((self.tmp / "01.Project" / "old-proj").exists())
 
+    def test_detail_goes_to_work_log_section(self) -> None:
+        self.worklog = self.tmp / "worklog.md"
+        self.worklog.write_text(
+            "2026-05-04\n\n이슈사항\n\n- 보고용 문제\n", encoding="utf-8"
+        )
+        detail = self.tmp / "detail.md"
+        detail.write_text(
+            "2026-05-04\n\n이슈사항\n\n- 상세 문제 — 수치 123\n\n"
+            "### Highlights\n\n#### demo\n- 성과 — 결과\n",
+            encoding="utf-8",
+        )
+        self._run("--detail-path", str(detail))
+        text = (self.tmp / "02.Area" / "daily-log" / "2026-05-04.md").read_text(encoding="utf-8")
+        work = sync._section_body(text, "## 03. Work", ignore_worklog_blocks=True)
+        log = sync._section_body(text, "## Work Log", ignore_worklog_blocks=True)
+        self.assertIn("- 보고용 문제", work)
+        self.assertNotIn("상세 문제", work)
+        self.assertNotIn("#highlight", work)
+        self.assertIn("- 상세 문제 — 수치 123", log)
+        self.assertIn("- #highlight #project/demo 성과 — 결과", log)
+        self.assertNotIn("### Highlights", log)
+        self.assertLess(text.index("## 03. Work"), text.index("## Work Log"))
+        self.assertLess(text.index("## Work Log"), text.index("## 04. Track"))
+
+        self.assertEqual(self._run("--detail-path", str(detail)), "no changes\n")
+
     def test_dry_run_writes_nothing(self) -> None:
         self.worklog = self.tmp / "worklog.md"
         self.worklog.write_text(

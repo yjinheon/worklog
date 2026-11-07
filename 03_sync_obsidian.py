@@ -8,7 +8,8 @@
 
 daily note가 원본이다:
   - ``### Today`` auto 블록  — 작업 줄 (``worklog_parser`` / 커밋 워크로그 파생)
-  - ``## 03. Work`` report 블록 — 그날 회사 업무일지 본문 그대로
+  - ``## 03. Work`` report 블록 — 그날 회사 업무일지 본문 그대로 (보고용 30줄)
+  - ``## Work Log`` detail 블록 — ``--detail-path`` 상세본(포트폴리오·기록용) + #highlight 줄
 
 01.Project에는 작업 줄·Highlights를 복사하지 않는다. 유일한 쓰기는
 존재하지 않는 새 프로젝트 노트 생성이다(아카이브에 있는 프로젝트는 재생성하지
@@ -71,6 +72,8 @@ AUTO_START = "%% worklog:auto:start"
 AUTO_END = "%% worklog:auto:end %%"
 REPORT_START = "%% worklog:report:start"
 REPORT_END = "%% worklog:report:end %%"
+DETAIL_START = "%% worklog:detail:start"
+DETAIL_END = "%% worklog:detail:end %%"
 
 
 _daily_template_cache: str | None = None
@@ -225,15 +228,19 @@ def parse_worklog(
         seen.add(key)
         lines.append(line)
         by_project.setdefault(item.project, []).append(line)
-    highlights: dict[str, list[str]] = {}
-    if original.strip():
-        for project, bullets in _highlights_by_project(original).items():
-            highlights[project] = [f"- #highlight #project/{project} {b}" for b in bullets]
+    highlights = tagged_highlights(original) if original.strip() else {}
     return ParsedWorklog(
         project_tasks=lines,
         tasks_by_project=by_project,
         highlights_by_project=highlights,
     )
+
+
+def tagged_highlights(text: str) -> dict[str, list[str]]:
+    return {
+        project: [f"- #highlight #project/{project} {b}" for b in bullets]
+        for project, bullets in _highlights_by_project(text).items()
+    }
 
 
 def _highlights_by_project(text: str) -> dict[str, list[str]]:
@@ -289,17 +296,23 @@ def report_body(content: str) -> str:
     return upper.strip()
 
 
-def build_report_block(target_date: date, content: str, highlights: dict[str, list[str]]) -> str:
+def build_report_block(
+    target_date: date,
+    content: str,
+    highlights: dict[str, list[str]],
+    markers: tuple[str, str] = (REPORT_START, REPORT_END),
+) -> str:
     if not content.strip():
         return ""
-    lines = [f"{REPORT_START} date={target_date} %%"]
+    start, end = markers
+    lines = [f"{start} date={target_date} %%"]
     lines.append(content.strip("\n"))
     if highlights:
         lines.append("")
         for project, bullets in highlights.items():
             for bullet in bullets:
                 lines.append(bullet)
-    lines.append(REPORT_END)
+    lines.append(end)
     return "\n".join(lines)
 
 
@@ -354,9 +367,9 @@ def resolve_daily_note(vault_root: Path, target_date: date) -> Path:
 
 def _replace_or_insert_block(section_body: str, block: str, start_marker: str) -> str:
     """같은 start 마커(date 없이)의 블록을 교체. 없으면 섹션 끝에 넣는다."""
-    first = block.splitlines()[0]
+    end_marker = start_marker.replace(":start", ":end") + " %%"
     pattern = re.compile(
-        rf"\n?{re.escape(start_marker)}[^\n]*\n.*?\n{re.escape(AUTO_END if start_marker == AUTO_START else REPORT_END)}\n?",
+        rf"\n?{re.escape(start_marker)}[^\n]*\n.*?\n{re.escape(end_marker)}\n?",
         re.DOTALL,
     )
     if pattern.search(section_body):
@@ -380,8 +393,20 @@ def ensure_daily_sections(content: str) -> str:
     return content
 
 
+def ensure_work_log_section(content: str) -> str:
+    """``## Work Log``가 없으면 ``## 03. Work`` 섹션 바로 뒤에 만든다."""
+    if re.search(r"^## Work Log\s*$", content, re.MULTILINE):
+        return content
+    bounds = _section_bounds(content, "## 03. Work", ignore_worklog_blocks=True)
+    if bounds is None:
+        return content.rstrip() + "\n\n## Work Log\n"
+    lines = content.splitlines()
+    end = bounds[1]
+    return "\n".join(lines[:end] + ["## Work Log", ""] + lines[end:]).rstrip() + "\n"
+
+
 def sync_daily_note(
-    content: str, target_date: date, task_block: str, report_block: str
+    content: str, target_date: date, task_block: str, report_block: str, detail_block: str = ""
 ) -> str:
     content = ensure_daily_sections(content)
 
@@ -395,6 +420,13 @@ def sync_daily_note(
         work = _section_body(content, "## 03. Work", ignore_worklog_blocks=True)
         content = _splice_section(
             content, "## 03. Work", _replace_or_insert_block(work, report_block, REPORT_START)
+        )
+
+    if detail_block:
+        content = ensure_work_log_section(content)
+        log = _section_body(content, "## Work Log", ignore_worklog_blocks=True)
+        content = _splice_section(
+            content, "## Work Log", _replace_or_insert_block(log, detail_block, DETAIL_START)
         )
 
     return content
@@ -574,6 +606,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "lines when the original worklog file has none.",
     )
     parser.add_argument(
+        "--detail-path",
+        type=Path,
+        default=None,
+        help="Work detail markdown (portfolio/log). Goes to the `## Work Log` section "
+        "with its Highlights; `## 03. Work` then holds only the report body.",
+    )
+    parser.add_argument(
         "--skip-run-worklog",
         action="store_true",
         help="Use an existing worklog file without running 00_run_commit_worklog.py.",
@@ -609,13 +648,18 @@ def main(argv: list[str]) -> int:
     if args.commit_worklog is not None and args.commit_worklog.is_file():
         commit_text = read_text(args.commit_worklog)
     parsed = parse_worklog(original, target_date, commit_worklog=commit_text or None)
+    detail = ""
+    highlights = parsed.highlights_by_project
+    if args.detail_path is not None:
+        detail = read_text(args.detail_path.expanduser())
+        highlights = tagged_highlights(detail)
 
     vault_root = args.vault_root.expanduser()
     changes: list[tuple[Path, str]] = []
 
 
     # 새 프로젝트 노트 생성 (config repo에 없고 아카이브에 있는 프로젝트는 제외)
-    projects = list(dict.fromkeys([*parsed.tasks_by_project, *parsed.highlights_by_project]))
+    projects = list(dict.fromkeys([*parsed.tasks_by_project, *highlights]))
     for project in projects:
         if project not in KNOWN_PROJECTS:
             continue
@@ -630,7 +674,10 @@ def main(argv: list[str]) -> int:
         before,
         target_date,
         build_task_block(target_date, parsed.project_tasks),
-        build_report_block(target_date, report_body(original), parsed.highlights_by_project),
+        build_report_block(target_date, report_body(original), {} if detail else highlights),
+        build_report_block(
+            target_date, report_body(detail), highlights, (DETAIL_START, DETAIL_END)
+        ),
     )
     if before != after:
         changes.append((note_path.relative_to(vault_root), after))

@@ -3,11 +3,11 @@ default:
 
 # 1) 보고용 업무일지 원본 추출 (DAILY_LOG의 해당 날짜 항목 전부 병합)
 report-digest date="":
-    uv run .claude/skills/report-worklog/scripts/extract_sections.py {{date}}
+    uv run ~/workspace/skills/skills/report-worklog/scripts/extract_sections.py {{date}}
 
 # 2) 해당 날짜의 DAILY_LOG 섹션/업데이트 블록 헤딩만 확인
 report-sessions date="":
-    uv run .claude/skills/report-worklog/scripts/extract_sections.py {{date}} --list
+    uv run ~/workspace/skills/skills/report-worklog/scripts/extract_sections.py {{date}} --list
 
 # 3) git 커밋 기반 worklog 생성 (OUTPUT=경로 로 출력 위치 지정)
 commit-log date="":

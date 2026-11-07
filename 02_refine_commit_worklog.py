@@ -27,9 +27,8 @@ import sys
 import urllib.request
 from pathlib import Path
 
-SCRIPT_DIR = Path(__file__).resolve().parent
 BUILD_PROMPT = (
-    SCRIPT_DIR / ".claude" / "skills" / "worklog-refiner" / "scripts" / "build_prompt.py"
+    Path.home() / "workspace" / "skills" / "skills" / "worklog-refiner" / "scripts" / "build_prompt.py"
 )
 
 # Env keys to strip so the CLIs are forced to use subscription/OAuth, not API keys.

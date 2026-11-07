@@ -3,25 +3,28 @@
 DAILY_LOG와 git commit으로 하루 업무를 만들고, **Obsidian daily note를 먼저** 쓰고,
 그에서 회사 업무일지를 잘라내는 흐름.
 
-daily note가 원본이고, 회사 업무일지(`worklogs/<date>.md`)는 그 부분집합이다.
+Work 상세가 원본이고, 회사 업무일지(`worklogs/<date>.md`)는 그 부분집합이다.
+daily note에는 둘 다 들어간다: `## 03. Work`는 보고용 30줄, `## Work Log`는 상세.
 
 | 산출물 | 위치 | 내용 |
 |---|---|---|
-| Work 상세 | `02.Area/daily-log/<date>.md` → `## 03. Work` report 블록 | 4 제목(Context / 이슈사항 / 검토사항 / 작업완료 사항) + `### Highlights` — 줄 제한 없음, 개인 repo 포함, 수치·근거 전부 |
+| 보고용 Work | `02.Area/daily-log/<date>.md` → `## 03. Work` report 블록 | 회사 업무일지 본문(`---` 위) 그대로 — 30줄 |
+| Work 상세 | 같은 노트 → `## Work Log` detail 블록 | 4 제목(Context / 이슈사항 / 검토사항 / 작업완료 사항) + `#highlight` 줄 — 줄 제한 없음, 개인 repo 포함, 수치·근거 전부 (포트폴리오·기록용) |
 | 작업 줄 | 같은 노트 → `### Today` auto 블록 | 커밋 워크로그 `### Projects` 체크박스에서 파생, `- [x] … #project/P #todo #type [due:: D] [completion:: D]` |
 | 회사 업무일지 | `worklogs/<date>.md` | Work 상세에서 회사 업무만 골라 30줄로 압축 + `---` 아래 커밋 워크로그(Jira가 읽는 `### Projects`) |
 
 ```
 DAILY_LOG ──extract_sections.py──▶ digest ──(LLM)──▶ /tmp/work-<date>.md (Work 상세)
 git commit ──00_run_commit_worklog.py──▶ /tmp/worklog-<date>.md (Projects·Repositories)
-                                          │
-03_sync_obsidian.py ◀─────────────────────┘
-   ├─▶ daily note ## 03. Work report 블록  (Work 상세)
-   ├─▶ daily note ### Today auto 블록       (작업 줄)
-   └─▶ 01.Project: 새 프로젝트 노트 생성만 (존재하는 노트에는 쓰지 않음)
 
 Work 상세 ──(LLM)──▶ worklogs/<date>.md (회사 업무만 30줄)
                 + printf '\n---\n\n' + /tmp/worklog-<date>.md (Jira용)
+
+03_sync_obsidian.py (just obsidian-sync)
+   ├─▶ daily note ## 03. Work report 블록  (worklogs/<date>.md 본문, 30줄)
+   ├─▶ daily note ## Work Log detail 블록  (Work 상세 + #highlight)
+   ├─▶ daily note ### Today auto 블록       (작업 줄)
+   └─▶ 01.Project: 새 프로젝트 노트 생성만 (존재하는 노트에는 쓰지 않음)
 ```
 
 ## 매일 하는 일
@@ -38,17 +41,17 @@ OUTPUT=/tmp/worklog-2026-10-08.md ./00_run_commit_worklog.py 2026-10-08
 #    - 4 제목, 줄 제한 없음, 개인 repo 포함, 수치·근거 전부
 #    - 끝에 ### Highlights (#### <repo> + - 불릿)
 
-# 3. daily note 반영
-just obsidian-dry 2026-10-08            # diff만 확인
-just obsidian-sync 2026-10-08           # Work 블록 + Today 작업 줄
-
-# 4. 회사 업무일지 (LLM) — daily note Work 블록에서 회사 업무만 골라 30줄 압축
+# 3. 회사 업무일지 (LLM) — Work 상세에서 회사 업무만 골라 30줄 압축
 #    → worklogs/2026-10-08.md
 sed '/^---$/,$d' worklogs/2026-10-08.md | sed '$d' | wc -l   # 30 이하
 
-# 5. 커밋 워크로그 붙이기 (Jira가 읽는 ### Projects)
+# 4. 커밋 워크로그 붙이기 (Jira가 읽는 ### Projects)
 printf '\n---\n\n' >> worklogs/2026-10-08.md
 cat /tmp/worklog-2026-10-08.md >> worklogs/2026-10-08.md
+
+# 5. daily note 반영
+just obsidian-dry 2026-10-08            # diff만 확인
+just obsidian-sync 2026-10-08           # 03. Work + Work Log + Today 작업 줄
 ```
 
 형식 규칙(Work 상세, 회사 일지 30줄, 불릿 모양, Highlights 규칙)은
@@ -56,8 +59,8 @@ cat /tmp/worklog-2026-10-08.md >> worklogs/2026-10-08.md
 
 ### 같은 날짜를 다시 쓸 때
 
-- Work 상세만 고칠 때: `/tmp/work-<date>.md` 수정 → `just obsidian-sync <date>`
-  (같은 날짜 report 블록만 교체, 멱등)
+- Work 상세·회사 일지를 고칠 때: 파일 수정 → `just obsidian-sync <date>`
+  (같은 날짜 report·detail 블록만 교체, 멱등)
 - 회사 일지 본문만 고칠 때: `worklogs/<date>.md` `---` 위만 수정 (Obsidian 반영 불필요)
 - 커밋 워크로그까지 다시 만들 때: `worklogs/<date>.md` `---` 앞 빈 줄부터 끝까지 지우고 5단계부터
 - 그 날짜로 Jira 이슈를 이미 만들었다면 `---` 아래는 다시 만들지 않는다 (이슈 key가 바뀐다)
@@ -79,8 +82,14 @@ cat /tmp/worklog-2026-10-08.md >> worklogs/2026-10-08.md
 ## 03. Work
 
 %% worklog:report:start date=2026-10-08 %%
-<Work 상세 — 4 제목 + ### Highlights(#highlight #project/X 태그)>
+<회사 업무일지 본문 — 30줄>
 %% worklog:report:end %%
+
+## Work Log
+
+%% worklog:detail:start date=2026-10-08 %%
+<Work 상세 — 4 제목 + #highlight #project/X 줄>
+%% worklog:detail:end %%
 ```
 
 - 같은 날짜를 다시 반영하면 그 블록만 교체된다 (멱등, 2번째는 `no changes`)
@@ -112,7 +121,7 @@ cat /tmp/worklog-2026-10-08.md >> worklogs/2026-10-08.md
 - 기술명은 그대로 쓴다 (ClickHouse, Loki, sqlglot …)
 - 수치는 DAILY_LOG에 있는 것만. 수치가 없으면 쓰지 않는다
 - 원인 규명, before→after 측정, 기각한 안과 그 근거가 가장 좋은 재료
-- 회사 일지 파일에도, 01.Project 노트에도 쓰지 않는다 — daily note Work 블록에만
+- 회사 일지 파일에도, 01.Project 노트에도 쓰지 않는다 — daily note `## Work Log` 블록에만
 
 ## 프로젝트 목록 관리
 

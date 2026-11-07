@@ -3,23 +3,23 @@ default:
 
 # 1) 보고용 업무일지 원본 추출 (DAILY_LOG의 해당 날짜 항목 전부 병합)
 report-digest date="":
-    uv run .claude/skills/report-worklog/scripts/extract_sections.py {{date}}
+    uv run ~/workspace/skills/skills/report-worklog/scripts/extract_sections.py {{date}}
 
 # 2) 해당 날짜의 DAILY_LOG 섹션/업데이트 블록 헤딩만 확인
 report-sessions date="":
-    uv run .claude/skills/report-worklog/scripts/extract_sections.py {{date}} --list
+    uv run ~/workspace/skills/skills/report-worklog/scripts/extract_sections.py {{date}} --list
 
 # 3) git 커밋 기반 worklog 생성 (OUTPUT=경로 로 출력 위치 지정)
 commit-log date="":
     ./00_run_commit_worklog.py {{date}}
 
-# 4) Work 상세(/tmp/work-DATE.md) + 커밋 워크로그 → daily note 반영 (daily-log 먼저)
+# 4) 회사 일지(worklogs/DATE.md) → ## 03. Work, Work 상세(/tmp/work-DATE.md) → ## Work Log, 커밋 워크로그 → Today
 obsidian-sync date:
-    ./03_sync_obsidian.py {{date}} --skip-run-worklog --worklog-path /tmp/work-{{date}}.md --commit-worklog /tmp/worklog-{{date}}.md
+    ./03_sync_obsidian.py {{date}} --skip-run-worklog --worklog-path worklogs/{{date}}.md --detail-path /tmp/work-{{date}}.md --commit-worklog /tmp/worklog-{{date}}.md
 
 # 5) Obsidian 반영 diff만 확인
 obsidian-dry date:
-    ./03_sync_obsidian.py {{date}} --skip-run-worklog --worklog-path /tmp/work-{{date}}.md --commit-worklog /tmp/worklog-{{date}}.md --dry-run
+    ./03_sync_obsidian.py {{date}} --skip-run-worklog --worklog-path worklogs/{{date}}.md --detail-path /tmp/work-{{date}}.md --commit-worklog /tmp/worklog-{{date}}.md --dry-run
 
 # 6) 워크로그 -> Jira 이슈 생성 계획만 출력 (dry-run)
 jira-plan start end:
@@ -36,3 +36,7 @@ jira-apply start end:
 # 9) 완료 이슈 CSV 내보내기
 jira-done start end:
     ./jira_done.py --start {{start}} --end {{end}}
+
+# 10) Jira 이슈 + 하위 이슈를 Markdown으로 내보내기 (기본: docs/jira/KEY.md)
+jira-export key *args:
+    ./jira_export.py {{key}} {{args}}
